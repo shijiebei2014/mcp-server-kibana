@@ -22,7 +22,13 @@
         {
           "name": "KIBANA_URL",
           "description": "Your Kibana instance URL (e.g., http://localhost:5601)",
-          "isRequired": true,
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "MULTI_KIBANA_CONFIG",
+          "description": "Path to YAML file containing multiple Kibana profiles",
+          "isRequired": false,
           "format": "string"
         },
         {
@@ -75,7 +81,13 @@
         {
           "name": "KIBANA_URL",
           "description": "Your Kibana instance URL",
-          "isRequired": true,
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "MULTI_KIBANA_CONFIG",
+          "description": "Path to YAML file containing multiple Kibana profiles",
+          "isRequired": false,
           "format": "string"
         },
         {

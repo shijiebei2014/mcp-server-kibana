@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { ServerBase, KibanaClient, ToolResponse } from './types.js';
+import { ServerBase, KibanaClient, KibanaClientResolver, ToolResponse } from './types.js';
+import { KibanaUrlSchema } from './tool-schemas.js';
 
 /**
  * Implementation function for updating a single Kibana saved object.
@@ -360,7 +361,7 @@ async function vl_bulk_update_saved_objects_impl(
 /**
  * Register VL (Visualization Layer) update tools with the MCP server
  */
-export function registerVLUpdateTools(server: ServerBase, kibanaClient: KibanaClient) {
+export function registerVLUpdateTools(server: ServerBase, resolver: KibanaClientResolver) {
   // Tool: Update a single Kibana saved object
   server.tool(
     "vl_update_saved_object",
@@ -388,7 +389,8 @@ export function registerVLUpdateTools(server: ServerBase, kibanaClient: KibanaCl
       })).optional().describe("OPTIONAL: Array of references to other saved objects. Updates the object's references. Each reference needs id, type, and name."),
       version: z.string().optional().describe("OPTIONAL: Version string for optimistic concurrency control. Use this to prevent conflicts when multiple processes update the same object. Get the version from a previous get/search operation."),
       upsert: z.record(z.any()).optional().describe("OPTIONAL: Attributes to use if the object doesn't exist (will create object if not found). Useful for create-or-update scenarios."),
-      space: z.string().optional().describe("Target Kibana space (optional, defaults to configured space)")
+      space: z.string().optional().describe("Target Kibana space (optional, defaults to configured space)"),
+      kibana_url: KibanaUrlSchema
     }),
     async (params: { 
       type: string; 
@@ -397,8 +399,10 @@ export function registerVLUpdateTools(server: ServerBase, kibanaClient: KibanaCl
       references?: Array<{ id: string; type: string; name: string }>; 
       version?: string; 
       upsert?: Record<string, any>; 
-      space?: string 
+      space?: string;
+      kibana_url?: string;
     }): Promise<ToolResponse> => {
+      const kibanaClient = resolver.resolve(params.kibana_url);
       return await vl_update_saved_object_impl(
         kibanaClient,
         params.type,
@@ -441,7 +445,8 @@ export function registerVLUpdateTools(server: ServerBase, kibanaClient: KibanaCl
         version: z.string().optional().describe("OPTIONAL: Version string for optimistic concurrency control for this specific object."),
         namespace: z.string().optional().describe("OPTIONAL: Specific namespace for this object (overrides space parameter).")
       })).min(1).describe("REQUIRED: Array of objects to update. Each object must have 'type', 'id', and 'attributes' fields. Minimum 1 object required."),
-      space: z.string().optional().describe("Target Kibana space (optional, defaults to configured space)")
+      space: z.string().optional().describe("Target Kibana space (optional, defaults to configured space)"),
+      kibana_url: KibanaUrlSchema
     }),
     async (params: { 
       objects: Array<{
@@ -452,8 +457,10 @@ export function registerVLUpdateTools(server: ServerBase, kibanaClient: KibanaCl
         version?: string;
         namespace?: string;
       }>; 
-      space?: string 
+      space?: string;
+      kibana_url?: string;
     }): Promise<ToolResponse> => {
+      const kibanaClient = resolver.resolve(params.kibana_url);
       return await vl_bulk_update_saved_objects_impl(
         kibanaClient,
         params.objects,

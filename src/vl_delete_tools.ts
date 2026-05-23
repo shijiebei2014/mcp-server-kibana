@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { ServerBase, KibanaClient, ToolResponse } from './types.js';
+import { ServerBase, KibanaClient, KibanaClientResolver, ToolResponse } from './types.js';
+import { KibanaUrlSchema } from './tool-schemas.js';
 
 /**
  * Implementation function for bulk deleting Kibana saved objects.
@@ -152,7 +153,7 @@ async function vl_bulk_delete_saved_objects_impl(
 /**
  * Register VL (Visualization Layer) delete tools with the MCP server
  */
-export function registerVLDeleteTools(server: ServerBase, kibanaClient: KibanaClient) {
+export function registerVLDeleteTools(server: ServerBase, resolver: KibanaClientResolver) {
   // Tool: Bulk delete Kibana saved objects
   server.tool(
     "vl_bulk_delete_saved_objects",
@@ -175,9 +176,11 @@ export function registerVLDeleteTools(server: ServerBase, kibanaClient: KibanaCl
         id: z.string().describe("REQUIRED: The saved object ID. This is the unique identifier for the specific object you want to delete.")
       })).min(1).describe("REQUIRED: Array of objects to delete. Each object must have 'type' and 'id' fields. Minimum 1 object required."),
       force: z.boolean().optional().describe("Force deletion of objects that exist in multiple namespaces. Set to true if you get an error about objects existing in multiple namespaces. WARNING: This also deletes legacy URL aliases and can place heavy load on Kibana. Default: false."),
-      space: z.string().optional().describe("Target Kibana space (optional, defaults to configured space)")
+      space: z.string().optional().describe("Target Kibana space (optional, defaults to configured space)"),
+      kibana_url: KibanaUrlSchema
     }),
-    async (params: { objects: Array<{ type: string; id: string }>; force?: boolean; space?: string }): Promise<ToolResponse> => {
+    async (params: { objects: Array<{ type: string; id: string }>; force?: boolean; space?: string; kibana_url?: string }): Promise<ToolResponse> => {
+      const kibanaClient = resolver.resolve(params.kibana_url);
       return await vl_bulk_delete_saved_objects_impl(
         kibanaClient,
         params.objects,

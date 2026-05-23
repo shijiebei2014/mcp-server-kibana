@@ -131,6 +131,7 @@
 | `KIBANA_CA_CERT`                 | CA 证书路径（可选，用于 SSL 验证）           | 否       |
 | `KIBANA_TIMEOUT`                 | 请求超时时间（毫秒，默认 30000）             | 否       |
 | `KIBANA_MAX_RETRIES`             | 最大请求重试次数（默认 3）                   | 否       |
+| `MULTI_KIBANA_CONFIG`            | 多 Kibana 配置文件路径（YAML 文件）          | 否       |
 | `NODE_TLS_REJECT_UNAUTHORIZED`   | 设为 `0` 可禁用 SSL 证书校验（谨慎使用）     | 否       |
 
 *必须提供 `KIBANA_COOKIES` 或 `KIBANA_USERNAME` 和 `KIBANA_PASSWORD` 之一用于认证。
@@ -179,6 +180,26 @@ KIBANA_USERNAME=your-username \
 KIBANA_PASSWORD=your-password \
 npx @tocharian/mcp-server-kibana
 ```
+
+### 方法 1.1: 多 Kibana 配置文件模式
+
+```bash
+MULTI_KIBANA_CONFIG=/etc/kibana/multi-kibana.yaml \
+npx @tocharian/mcp-server-kibana
+```
+
+配置文件示例：
+
+```yaml
+kibana:
+  - KIBANA_URL: "https://kibana-test-hkex.hashxdc.com"
+    KIBANA_USERNAME: "user_a"
+    KIBANA_PASSWORD: "pass_a"
+  - KIBANA_URL: "https://kibana-global.hashxdc.com"
+    KIBANA_API_KEY: "<api_key_b>"
+```
+
+当配置了多个实例时，调用 Kibana API 的工具可传入 `kibana_url`（例如 Discover 页面 URL），服务端会按域名路由到对应实例。
 
 ### 方法 2: Claude Desktop 集成（推荐）
 添加到 Claude Desktop 配置文件：

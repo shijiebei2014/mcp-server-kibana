@@ -75,6 +75,12 @@ export interface KibanaClient {
   patch?: (url: string, data?: any, options?: { headers?: any; space?: string }) => Promise<any>;
 }
 
+export interface KibanaClientResolver {
+  resolve: (kibanaUrl?: string) => KibanaClient;
+  listHostnames: () => string[];
+  profileCount: number;
+}
+
 // Server base interface for tools, prompts, and resources registration
 export interface ServerBase {
   tool: {
@@ -122,6 +128,7 @@ export interface ServerCreationOptions {
   name: string;
   version: string;
   transport?: any;
-  config: KibanaConfig;
+  resolver: KibanaClientResolver;
+  defaultSpace: string;
   description?: string;
 } 

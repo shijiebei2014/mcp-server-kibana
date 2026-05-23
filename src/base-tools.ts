@@ -1,7 +1,8 @@
 import { z } from "zod";
-import type { ServerBase, KibanaClient, ToolResponse } from "./types";
+import type { ServerBase, KibanaClientResolver, ToolResponse } from "./types";
 import { simplifyEndpointDetail, formatEndpointToMarkdown } from "./openapi-simplifier.js";
 import { checkTokenLimit } from "./utils/token-limiter.js";
+import { KibanaUrlSchema } from "./tool-schemas.js";
 
 // Import API index and search logic
 import fs from 'fs';
@@ -151,16 +152,18 @@ function resolveRef(obj: any, doc: any, seen = new Set()): any {
   return result;
 }
 
-export function registerBaseTools(server: ServerBase, kibanaClient: KibanaClient, defaultSpace: string, maxTokenCall = 20000) {
+export function registerBaseTools(server: ServerBase, resolver: KibanaClientResolver, defaultSpace: string, maxTokenCall = 20000) {
   // Tool: Get Kibana server status
   server.tool(
     "get_status",
     `Get Kibana server status with multi-space support`,
     z.object({
-      space: z.string().optional().describe("Target Kibana space (optional, defaults to configured space)")
+      space: z.string().optional().describe("Target Kibana space (optional, defaults to configured space)"),
+      kibana_url: KibanaUrlSchema
     }),
-    async ({ space }): Promise<ToolResponse> => {
+    async ({ space, kibana_url }): Promise<ToolResponse> => {
       try {
+        const kibanaClient = resolver.resolve(kibana_url);
         const targetSpace = space || defaultSpace;
         const response = await kibanaClient.get('/api/status', { space });
         return {
@@ -195,10 +198,12 @@ export function registerBaseTools(server: ServerBase, kibanaClient: KibanaClient
       body: z.any().optional(),
       params: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
       space: z.string().optional().describe("Target Kibana space (optional, defaults to configured space)"),
+      kibana_url: KibanaUrlSchema,
       break_token_rule: z.boolean().optional().default(false).describe("Set to true to bypass token limits in critical situations. Use sparingly to avoid context overflow.")
     }),
-    async ({ method, path, body, params, space, break_token_rule }): Promise<ToolResponse> => {
+    async ({ method, path, body, params, space, kibana_url, break_token_rule }): Promise<ToolResponse> => {
       try {
+        const kibanaClient = resolver.resolve(kibana_url);
         const targetSpace = space || defaultSpace;
         let url = path;
         if (params) {
@@ -382,10 +387,12 @@ export function registerBaseTools(server: ServerBase, kibanaClient: KibanaClient
     "get_available_spaces",
     "Get all available Kibana spaces with current context",
     z.object({
-      include_details: z.boolean().optional().default(true).describe("Include detailed space information (name, description, etc.)")
+      include_details: z.boolean().optional().default(true).describe("Include detailed space information (name, description, etc.)"),
+      kibana_url: KibanaUrlSchema
     }),
-    async ({ include_details = true }): Promise<ToolResponse> => {
+    async ({ include_details = true, kibana_url }): Promise<ToolResponse> => {
       try {
+        const kibanaClient = resolver.resolve(kibana_url);
         const response = await kibanaClient.get('/api/spaces/space');
         
         const result = {

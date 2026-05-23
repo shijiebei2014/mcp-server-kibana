@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { ServerBase, KibanaClient, ToolResponse } from './types.js';
+import { ServerBase, KibanaClient, KibanaClientResolver, ToolResponse } from './types.js';
+import { KibanaUrlSchema } from './tool-schemas.js';
 
 /**
  * Implementation function for creating a Kibana saved object.
@@ -267,7 +268,7 @@ function validateAttributesByType(type: string, attributes: Record<string, any>)
 /**
  * Register VL (Visualization Layer) create tools with the MCP server
  */
-export function registerVLCreateTools(server: ServerBase, kibanaClient: KibanaClient) {
+export function registerVLCreateTools(server: ServerBase, resolver: KibanaClientResolver) {
   // Tool: Create a Kibana saved object
   server.tool(
     "vl_create_saved_object",
@@ -295,7 +296,8 @@ export function registerVLCreateTools(server: ServerBase, kibanaClient: KibanaCl
         name: z.string().describe("Reference name used in the object")
       })).optional().describe("OPTIONAL: Array of references to other saved objects. Used to link objects together (e.g., dashboard panels referencing visualizations). Each reference needs id, type, and name."),
       initialNamespaces: z.array(z.string()).optional().describe("OPTIONAL: Array of initial namespaces for the object. Used for multi-tenant setups. If not specified, object will be created in the default namespace."),
-      space: z.string().optional().describe("Target Kibana space (optional, defaults to configured space)")
+      space: z.string().optional().describe("Target Kibana space (optional, defaults to configured space)"),
+      kibana_url: KibanaUrlSchema
     }),
     async (params: { 
       type: string; 
@@ -304,8 +306,10 @@ export function registerVLCreateTools(server: ServerBase, kibanaClient: KibanaCl
       overwrite?: boolean; 
       references?: Array<{ id: string; type: string; name: string }>; 
       initialNamespaces?: string[]; 
-      space?: string 
+      space?: string;
+      kibana_url?: string;
     }): Promise<ToolResponse> => {
+      const kibanaClient = resolver.resolve(params.kibana_url);
       return await vl_create_saved_object_impl(
         kibanaClient,
         params.type,

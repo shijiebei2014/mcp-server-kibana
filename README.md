@@ -78,6 +78,28 @@ KIBANA_COOKIES="sid=xxx; security-session=yyy" \
 npx @tocharianou/mcp-server-kibana
 ```
 
+### Multi-Kibana (Config File Path)
+
+Set `MULTI_KIBANA_CONFIG` to a YAML file path:
+
+```bash
+MULTI_KIBANA_CONFIG=/etc/kibana/multi-kibana.yaml \
+npx @tocharianou/mcp-server-kibana
+```
+
+Example file content:
+
+```yaml
+kibana:
+  - KIBANA_URL: "https://kibana-test-hkex.hashxdc.com"
+    KIBANA_USERNAME: "user_a"
+    KIBANA_PASSWORD: "pass_a"
+  - KIBANA_URL: "https://kibana-global.hashxdc.com"
+    KIBANA_API_KEY: "<api_key_b>"
+```
+
+When multiple profiles are configured, tools that call Kibana APIs accept optional `kibana_url`; provide a Discover/app URL so the server can route by hostname.
+
 ### HTTP Mode (Remote Access)
 
 ```bash
@@ -135,6 +157,7 @@ Health check: `http://localhost:3000/health`
 | `KIBANA_DEFAULT_SPACE` | Default Kibana space | `default` |
 | `KIBANA_CA_CERT` | CA certificate path | - |
 | `KIBANA_TIMEOUT` | Request timeout (ms) | `30000` |
+| `MULTI_KIBANA_CONFIG` | Path to YAML file containing multiple Kibana profiles | - |
 | `MCP_TRANSPORT` | Transport mode | `stdio` |
 | `MCP_HTTP_PORT` | HTTP server port | `3000` |
 | `MCP_HTTP_HOST` | HTTP server host | `localhost` |

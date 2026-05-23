@@ -4,7 +4,7 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import type { ServerBase, KibanaClient, ResourceResponse } from "./types";
+import type { ServerBase, KibanaClientResolver, ResourceResponse } from "./types";
 
 // ESM-compatible __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -81,7 +81,7 @@ function searchApiEndpoints(query: string): ApiEndpoint[] {
   );
 }
 
-export function registerResources(server: ServerBase, kibanaClient: KibanaClient, spaceName: string) {
+export function registerResources(server: ServerBase, resolver: KibanaClientResolver, spaceName: string) {
   // 1. API path list resource
   server.resource(
     "kibana-api-paths",
@@ -97,6 +97,7 @@ export function registerResources(server: ServerBase, kibanaClient: KibanaClient
             mimeType: "application/json",
             text: JSON.stringify({
               space: spaceName,
+              available_kibana_hostnames: resolver.listHostnames(),
               total_endpoints: endpoints.length,
               search_query: search || "all",
               endpoints: endpoints.map(e => ({
@@ -129,6 +130,7 @@ export function registerResources(server: ServerBase, kibanaClient: KibanaClient
               mimeType: "application/json",
               text: JSON.stringify({
                 space: spaceName,
+                available_kibana_hostnames: resolver.listHostnames(),
                 error: "API endpoint not found",
                 requested: { method, path }
               }, null, 2)
@@ -143,6 +145,7 @@ export function registerResources(server: ServerBase, kibanaClient: KibanaClient
             mimeType: "application/json",
             text: JSON.stringify({
               space: spaceName,
+              available_kibana_hostnames: resolver.listHostnames(),
               endpoint: endpoint
             }, null, 2)
           }

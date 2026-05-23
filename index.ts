@@ -5,21 +5,17 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
 import { randomUUID } from "crypto";
-import axios, { AxiosError } from "axios";
-import fs from "fs";
-import { z } from "zod";
 import { 
   ServerBase, 
   RequestHandlerExtra, 
-  ToolResponse,
-  ResourceResponse,
-  PromptResponse,
-  KibanaConfig, 
-  KibanaClient,
-  KibanaConfigSchema,
+  ToolResponse, 
+  ResourceResponse, 
+  PromptResponse, 
   KibanaError,
   ServerCreationOptions
 } from "./src/types.js";
+import { loadKibanaProfiles } from "./src/multi-kibana-config.js";
+import { createKibanaClientResolver } from "./src/kibana-resolver.js";
 
 // Import all tool modules
 import { registerBaseTools } from "./src/base-tools.js";
@@ -31,162 +27,6 @@ import { registerVLDeleteTools } from "./src/vl_delete_tools.js";
 import { registerVLCreateTools } from "./src/vl_create_tools.js";
 import { registerVLUpdateTools } from "./src/vl_update_tools.js";
 import { registerAnalysisTools } from "./src/analysis-tools.js";
-
-
-// Create Kibana client
-function createKibanaClient(config: KibanaConfig): KibanaClient {
-  // Extract origin and base path separately so that axios does not drop
-  // the sub-path when request URLs start with "/".
-  // e.g. KIBANA_URL = "https://host/_plugin/kibana"
-  //   → origin   = "https://host"
-  //   → basePath = "/_plugin/kibana"
-  const parsedUrl = new URL(config.url);
-  const basePath = parsedUrl.pathname.replace(/\/$/, ''); // e.g. "/_plugin/kibana" or ""
-  const axiosConfig: any = {
-    baseURL: parsedUrl.origin,   // e.g. "https://host"
-    timeout: 60000, // 60 seconds
-    headers: {
-      'Content-Type': 'application/json',
-      'kbn-xsrf': 'true',
-      'x-elastic-internal-origin': 'kibana'
-    },
-  };
-
-  // Add authentication - prioritize in order: API Key > Basic Auth > Cookies
-  if (config.apiKey) {
-    // API Key authentication
-    axiosConfig.headers['Authorization'] = `ApiKey ${config.apiKey}`;
-  } else if (config.username && config.password) {
-    // Basic authentication
-    axiosConfig.auth = {
-      username: config.username,
-      password: config.password,
-    };
-  } else if (config.cookies) {
-    // Cookie-based authentication
-    axiosConfig.headers['Cookie'] = config.cookies;
-  }
-
-  // Add CA certificate
-  if (config.caCert) {
-    try {
-      axiosConfig.httpsAgent = new (require("https").Agent)({
-        ca: fs.readFileSync(config.caCert),
-      });
-    } catch (error) {
-      throw new KibanaError("Failed to load CA certificate", undefined, error);
-    }
-  }
-
-  // Dynamic URL transformation logic - support specifying space for each call.
-  // Always prepend basePath so that sub-path installations (e.g. /_plugin/kibana)
-  // are handled correctly regardless of whether the request path starts with "/".
-  const buildSpaceAwareUrl = (url: string, space?: string): string => {
-    const targetSpace = space || config.defaultSpace;
-    if (targetSpace && targetSpace !== 'default' && url.startsWith('/api/')) {
-      return `${basePath}/s/${targetSpace}${url}`;
-    }
-    return `${basePath}${url}`;
-  };
-
-  const axiosInstance = axios.create(axiosConfig);
-  
-
-  axiosInstance.interceptors.response.use(
-    (response) => {
-
-      return response.data;
-    },
-    (error) => {
-
-      return Promise.reject(error);
-    }
-  );
-
-  return {
-    get: async (url: string, options?: { params?: any; headers?: any; space?: string }) => {
-      const spaceAwareUrl = buildSpaceAwareUrl(url, options?.space);
-      try {
-        const response = await axiosInstance.get(spaceAwareUrl, { 
-          params: options?.params,
-          headers: { ...axiosConfig.headers, ...options?.headers }
-        });
-        return response;
-      } catch (error) {
-        const axiosError = error as AxiosError;
-        throw new KibanaError(
-          `GET request failed: ${axiosError.message}`,
-          axiosError.response?.status,
-          axiosError.response?.data
-        );
-      }
-    },
-    post: async (url: string, data?: any, options?: { headers?: any; space?: string }) => {
-      const spaceAwareUrl = buildSpaceAwareUrl(url, options?.space);
-      try {
-        const response = await axiosInstance.post(spaceAwareUrl, data, { 
-          headers: { ...axiosConfig.headers, ...options?.headers }
-        });
-        return response;
-      } catch (error) {
-        const axiosError = error as AxiosError;
-        throw new KibanaError(
-          `POST request failed: ${axiosError.message}`,
-          axiosError.response?.status,
-          axiosError.response?.data
-        );
-      }
-    },
-    put: async (url: string, data?: any, options?: { headers?: any; space?: string }) => {
-      const spaceAwareUrl = buildSpaceAwareUrl(url, options?.space);
-      try {
-        const response = await axiosInstance.put(spaceAwareUrl, data, { 
-          headers: { ...axiosConfig.headers, ...options?.headers }
-        });
-        return response;
-      } catch (error) {
-        const axiosError = error as AxiosError;
-        throw new KibanaError(
-          `PUT request failed: ${axiosError.message}`,
-          axiosError.response?.status,
-          axiosError.response?.data
-        );
-      }
-    },
-    delete: async (url: string, options?: { headers?: any; space?: string }) => {
-      const spaceAwareUrl = buildSpaceAwareUrl(url, options?.space);
-      try {
-        const response = await axiosInstance.delete(spaceAwareUrl, { 
-          headers: { ...axiosConfig.headers, ...options?.headers }
-        });
-        return response;
-      } catch (error) {
-        const axiosError = error as AxiosError;
-        throw new KibanaError(
-          `DELETE request failed: ${axiosError.message}`,
-          axiosError.response?.status,
-          axiosError.response?.data
-        );
-      }
-    },
-    patch: async (url: string, data?: any, options?: { headers?: any; space?: string }) => {
-      const spaceAwareUrl = buildSpaceAwareUrl(url, options?.space);
-      try {
-        const response = await axiosInstance.patch(spaceAwareUrl, data, { 
-          headers: { ...axiosConfig.headers, ...options?.headers }
-        });
-        return response;
-      } catch (error) {
-        const axiosError = error as AxiosError;
-        throw new KibanaError(
-          `PATCH request failed: ${axiosError.message}`,
-          axiosError.response?.status,
-          axiosError.response?.data
-        );
-      }
-    },
-  };
-}
 
 interface DashboardPanelParams {
   dashboard_id: string;
@@ -202,12 +42,7 @@ interface DashboardPanelParams {
 
 // Create Kibana MCP server
 export async function createKibanaMcpServer(options: ServerCreationOptions): Promise<McpServer> {
-  const { name, version, transport, config, description } = options;
-
-  // Validate configuration
-  const validatedConfig = KibanaConfigSchema.parse(config);
-  const kibanaClient = createKibanaClient(validatedConfig);
-  const defaultSpace = validatedConfig.defaultSpace || 'default';
+  const { name, version, transport, resolver, defaultSpace, description } = options;
 
   const server = new McpServer({
     name,
@@ -307,15 +142,15 @@ export async function createKibanaMcpServer(options: ServerCreationOptions): Pro
 
   // Register all tool modules
   const registrations = [
-    registerBaseTools(serverBase, kibanaClient, defaultSpace, maxTokenCall),
+    registerBaseTools(serverBase, resolver, defaultSpace, maxTokenCall),
     registerPrompts(serverBase, defaultSpace),
-    registerResources(serverBase, kibanaClient, defaultSpace),
-    registerVlTools(serverBase, kibanaClient, defaultSpace, maxTokenCall),
-    registerVLGetTools(serverBase, kibanaClient, maxTokenCall),
-    registerVLDeleteTools(serverBase, kibanaClient),
-    registerVLCreateTools(serverBase, kibanaClient),
-    registerVLUpdateTools(serverBase, kibanaClient),
-    registerAnalysisTools(serverBase, kibanaClient, defaultSpace)
+    registerResources(serverBase, resolver, defaultSpace),
+    registerVlTools(serverBase, resolver, defaultSpace, maxTokenCall),
+    registerVLGetTools(serverBase, resolver, maxTokenCall),
+    registerVLDeleteTools(serverBase, resolver),
+    registerVLCreateTools(serverBase, resolver),
+    registerVLUpdateTools(serverBase, resolver),
+    registerAnalysisTools(serverBase, resolver, defaultSpace)
   ];
 
   await Promise.all(registrations);
@@ -326,24 +161,18 @@ export async function createKibanaMcpServer(options: ServerCreationOptions): Pro
 // Main function
 async function main() {
   try {
-    // Create configuration from environment variables
-    const config: KibanaConfig = {
-      url: process.env.KIBANA_URL || "http://localhost:5601",
-      username: process.env.KIBANA_USERNAME || "",
-      password: process.env.KIBANA_PASSWORD || "",
-      cookies: process.env.KIBANA_COOKIES,
-      apiKey: process.env.KIBANA_API_KEY,
-      caCert: process.env.KIBANA_CA_CERT,
-      timeout: parseInt(process.env.KIBANA_TIMEOUT || "30000", 10),
-      maxRetries: parseInt(process.env.KIBANA_MAX_RETRIES || "3", 10),
-      defaultSpace: process.env.KIBANA_DEFAULT_SPACE || 'default'
-    };
+    const profiles = loadKibanaProfiles();
+    const resolver = createKibanaClientResolver(profiles);
 
-    const defaultSpace = config.defaultSpace || 'default';
+    const defaultSpace = profiles[0].defaultSpace || 'default';
     const serverName = "kibana-mcp-server";
     const serverDescription = defaultSpace === 'default' 
       ? "Kibana MCP Server with multi-space support"
       : `Kibana MCP Server with multi-space support (default: '${defaultSpace}')`;
+
+    process.stderr.write(
+      `Configured ${resolver.profileCount} Kibana profile(s): ${resolver.listHostnames().join(", ")}\n`,
+    );
 
     // Check if HTTP mode is enabled
     const useHttp = process.env.MCP_TRANSPORT === 'http';
@@ -394,7 +223,8 @@ async function main() {
             const server = await createKibanaMcpServer({
               name: serverName,
               version: "0.7.3",
-              config,
+              resolver,
+              defaultSpace,
               description: serverDescription
             });
 
@@ -472,7 +302,8 @@ async function main() {
       const server = await createKibanaMcpServer({
         name: serverName,
         version: "0.7.3",
-        config,
+        resolver,
+        defaultSpace,
         description: serverDescription
       });
 
